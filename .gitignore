@@ -1,0 +1,4 @@
+# Installer tidak masuk repo: GitHub menolak berkas di atas 100 MB.
+# Keduanya menempel pada rilis GitHub, bukan pada commit.
+NUMA-Setup.exe
+NUMA-Setup.msi

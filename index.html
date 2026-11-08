@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NUMA, konversi not angka ke berkas MIDI</title>
+<meta name="description" content="NUMA membaca dokumen not angka, memeriksa strukturnya, lalu menuliskannya sebagai berkas MIDI. Unduh aplikasi desktop NUMA.">
+<meta property="og:title" content="NUMA, konversi not angka ke berkas MIDI">
+<meta property="og:description" content="Not angka masuk, berkas MIDI keluar.">
+<!-- TODO: og:image sebaiknya memakai URL absolut ke icon.png setelah situs ini punya alamat -->
+<meta property="og:image" content="icon.png">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#070910" id="meta-tema">
+
+<!-- Tema dipasang sebelum cat pertama supaya tidak berkedip saat pilihan tersimpan berbeda dari sistem -->
+<script>
+(function(){
+  document.documentElement.classList.add('js');
+  var t;
+  try{ t = localStorage.getItem('numa-tema'); }catch(e){}
+  if(t !== 'terang' && t !== 'gelap'){
+    t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'terang' : 'gelap';
+  }
+  document.documentElement.setAttribute('data-tema', t);
+})();
+</script>
+<noscript><style>.tombol-tema{display:none}</style></noscript>
+
+<!-- Ikon aplikasi dipakai sebagai favicon dan tanda di navigasi -->
+<link rel="icon" href="icon.png" type="image/png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,Menlo,monospace;
+  --sans:"Archivo","Segoe UI",Arial,sans-serif;
+  color-scheme:dark;
+
+  --bg:#070910;
+  --teks:#eef1f5;
+  /* Redup dinaikkan dari #a6aebb: di atas kaca, sheen tepi atas menurunkan kontrasnya ke 3.71:1 */
+  --redup:#bcc3ce;
+  --aksen:#589dfb;
+  /* Biru terang ikon gagal sebagai teks di atas kaca (3.24:1), jadi teks aksen memakai versi lebih terang */
+  --aksen-teks-kaca:#a8cbff;
+  --aksen-teks:#08122b;
+  --tombol:#2b53c0;
+  --tombol-hover:#3b6fe0;
+  --tombol-teks:#ffffff;
+  --fokus:#7fb2ff;
+
+  /* Material kaca. Isi tipis, rim terang di tepi atas, bayang lembut di bawah. */
+  --kaca-isi:rgba(255,255,255,.055);
+  --kaca-isi-kuat:rgba(255,255,255,.09);
+  --kaca-sheen:rgba(255,255,255,.05);
+  --kaca-tepi:rgba(255,255,255,.14);
+  --kaca-tepi-aksi:rgba(255,255,255,.5);
+  /* Batas kontrol kecil di navigasi. Lebih tipis dari tepi aksi, karena tombolnya
+     sudah punya label atau ikon sendiri; batas di sini hanya penguat, bukan penanda. */
+  --kaca-garis-kontrol:rgba(255,255,255,.22);
+  /* Garis bawah tautan teks. Lebih tegas dari garis kontrol supaya tautan tetap
+     terbaca sebagai tautan, tapi tidak seberat garis batas tombol. */
+  --garis-tautan:rgba(255,255,255,.48);
+  --kaca-rim:rgba(255,255,255,.3);
+  --kaca-bawah:rgba(0,0,0,.22);
+  --kaca-bayang:0 24px 60px rgba(0,0,0,.45);
+  --kaca-blur:blur(26px) saturate(165%);
+
+  /* Kontrol kecil di navigasi dan alas panel menu ponsel memakai isi pekat,
+     bukan kaca transparan. Alasannya: panel menu menumpuk teks halaman, dan
+     kaca yang tembus membuat menu tidak terbaca. */
+  --kontrol-isi:#1b2130;
+  --kontrol-isi-hover:#252d3f;
+  --kontrol-garis:rgba(255,255,255,.38);
+  --kontrol-bayang:0 1px 2px rgba(0,0,0,.35);
+  --menu-isi:#12161f;
+  --menu-hover:rgba(255,255,255,.09);
+  /* Garis tepi panel lebih tipis dari garis kontrol: panel besar tidak perlu
+     ring tegas, dan ring tebal di sekelilingnya akan terbaca sebagai kartu berat. */
+  --menu-garis:rgba(255,255,255,.16);
+
+  --garis:rgba(255,255,255,.1);
+  --garis-tebal:rgba(255,255,255,.2);
+  --r-panel:24px;
+}
+
+html[data-tema="terang"]{
+  color-scheme:light;
+  --bg:#eef1f6;
+  --teks:#0f131a;
+  --redup:#4e5663;
+  --aksen:#1f47b8;
+  --aksen-teks-kaca:#1f47b8;
+  --aksen-teks:#ffffff;
+  --tombol:#1f47b8;
+  --tombol-hover:#273289;
+  --tombol-teks:#ffffff;
+  --fokus:#1f47b8;
+
+  --kaca-isi:rgba(255,255,255,.55);
+  --kaca-isi-kuat:rgba(255,255,255,.72);
+  --kaca-sheen:rgba(255,255,255,.62);
+  --kaca-tepi:rgba(255,255,255,.9);
+  --kaca-tepi-aksi:rgba(16,24,40,.5);
+  --kaca-garis-kontrol:rgba(16,24,40,.22);
+  --garis-tautan:rgba(16,24,40,.58);
+  --kaca-rim:rgba(255,255,255,.95);
+  --kaca-bawah:rgba(20,30,50,.05);
+  --kaca-bayang:0 20px 44px rgba(23,35,66,.14);
+  --kaca-blur:blur(26px) saturate(150%);
+
+  /* Isi kontrol sedikit lebih gelap dari batang kaca di belakangnya. Putih penuh
+     tidak terpisah dari batang yang juga nyaris putih, jadi isinya diberi tint
+     biru muda dari keluarga ikon. */
+  --kontrol-isi:#e7ebf5;
+  --kontrol-isi-hover:#dbe1ee;
+  --kontrol-garis:rgba(16,24,40,.5);
+  /* Bayang tipis sebagai penanda elevasi: isi kontrol hanya sedikit lebih gelap
+     dari batang di belakangnya, jadi garis dan bayang yang mengangkatnya. */
+  --kontrol-bayang:0 1px 2px rgba(23,35,66,.14);
+  --menu-isi:#fbfcfe;
+  --menu-hover:rgba(16,24,40,.06);
+  --menu-garis:rgba(16,24,40,.16);
+
+  --garis:rgba(16,24,40,.1);
+  --garis-tebal:rgba(16,24,40,.18);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+html{scroll-behavior:smooth;scroll-padding-top:104px;background:var(--bg)}
+body{background:transparent}
+
+a,button,summary,label{cursor:pointer}
+button:disabled,[aria-disabled="true"]{cursor:not-allowed}
+
+/* Lapisan warna di belakang kaca. Kaca perlu sesuatu untuk dibiaskan,
+   jadi latarnya diberi tiga bidang warna dari keluarga biru ikon.
+   Ketiganya melayang sangat lambat dengan durasi berbeda supaya tidak pernah sinkron. */
+.latar{
+  position:fixed;inset:0;z-index:-1;overflow:hidden;
+  background:var(--bg);pointer-events:none;
+}
+.latar span{
+  position:absolute;border-radius:50%;
+  /* Hanya transform yang dianimasikan. Opasitas tidak boleh ikut bergerak:
+     tema terang menimpanya lewat selektor html[data-tema="terang"], dan animasi
+     akan mengalahkan aturan itu. */
+  animation-timing-function:ease-in-out;
+  animation-iteration-count:infinite;
+  animation-direction:alternate;
+}
+.pudar-1{
+  width:74vw;height:74vw;left:-20vw;top:-30vw;
+  background:radial-gradient(circle,#2b53c0 0%,rgba(43,83,192,0) 62%);
+  opacity:.55;
+  animation-name:gerak-1;
+  animation-duration:40s;
+}
+.pudar-2{
+  width:54vw;height:54vw;right:-16vw;top:-8vw;
+  background:radial-gradient(circle,#589dfb 0%,rgba(88,157,251,0) 60%);
+  opacity:.2;
+  animation-name:gerak-2;
+  animation-duration:32s;
+}
+.pudar-3{
+  width:86vw;height:64vw;left:8vw;bottom:-34vw;
+  background:radial-gradient(circle,#1f47b8 0%,rgba(31,71,184,0) 62%);
+  opacity:.45;
+  animation-name:gerak-3;
+  animation-duration:48s;
+}
+
+/* Jarak geser memakai persen dari ukuran bidangnya sendiri, jadi gerakannya
+   tetap seimbang di layar sempit maupun lebar tanpa perlu nilai terpisah.
+   Ketiganya alternate, jadi tidak ada lompatan saat siklus berbalik. */
+@keyframes gerak-1{
+  from{transform:translate3d(0,0,0) scale(1)}
+  to{transform:translate3d(9%,6%,0) scale(1.12)}
+}
+@keyframes gerak-2{
+  from{transform:translate3d(0,0,0) scale(1.05)}
+  to{transform:translate3d(-10%,7%,0) scale(1.18)}
+}
+@keyframes gerak-3{
+  from{transform:translate3d(0,0,0) scale(1.03)}
+  to{transform:translate3d(8%,-7%,0) scale(1.14)}
+}
+
+html[data-tema="terang"] .pudar-1{opacity:.22}
+html[data-tema="terang"] .pudar-2{opacity:.16}
+html[data-tema="terang"] .pudar-3{opacity:.18}
+
+/* Di ponsel gerakan diperlambat: kaca di atasnya harus menghitung ulang blur
+   setiap bingkai, jadi makin kecil perubahan tiap bingkai, makin ringan. */
+@media(max-width:820px){
+  .pudar-1{animation-duration:56s}
+  .pudar-2{animation-duration:46s}
+  .pudar-3{animation-duration:64s}
+}
+
+/* Di layar potret, lebar layar jauh lebih kecil dari tingginya. Bidang berukuran
+   vw menyusut jadi bintik di pojok atas, dan separuh halaman kehilangan warna
+   yang dibiaskan kaca. Di sini ukurannya memakai vh dan posisinya disebar ke
+   bawah: satu di kepala halaman, satu di tengah, satu di sepertiga bawah. Nilai
+   ini tidak berlaku di layar mendatar, jadi desktop tidak berubah sedikit pun. */
+@media(max-width:820px) and (orientation:portrait){
+  .pudar-1{width:95vh;height:95vh;left:-55vw;top:-35vh}
+  .pudar-2{width:70vh;height:70vh;right:-45vw;top:18vh}
+  /* bottom:auto wajib: aturan dasar memakai bottom, dan tanpa ini posisinya
+     bergantung pada mana yang dianggap berlebih oleh peramban. */
+  .pudar-3{width:90vh;height:90vh;left:-40vw;top:52vh;bottom:auto}
+}
+
+body{
+  color:var(--teks);
+  font-family:var(--sans);
+  font-size:1rem;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+  transition:color .2s ease;
+}
+
+:focus-visible{outline:2px solid var(--fokus);outline-offset:3px;border-radius:6px}
+
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{transition:none !important;animation:none !important}
+}
+
+.sr-only{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;
+}
+
+.skip{
+  position:absolute;left:20px;top:-70px;z-index:60;
+  background:var(--teks);color:var(--bg);
+  padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:600;
+}
+.skip:focus{top:14px}
+
+.wrap{width:min(1180px,100% - 56px);margin-inline:auto}
+@media(max-width:640px){.wrap{width:calc(100% - 32px)}}
+
+/* ====== material kaca ====== */
+.kaca{
+  position:relative;
+  background-color:var(--kaca-isi);
+  background-image:linear-gradient(180deg,var(--kaca-sheen) 0%,transparent 46%);
+  border:1px solid var(--kaca-tepi);
+  border-radius:var(--r-panel);
+  box-shadow:
+    inset 0 1px 0 var(--kaca-rim),
+    inset 0 -1px 0 var(--kaca-bawah),
+    var(--kaca-bayang);
+  -webkit-backdrop-filter:var(--kaca-blur);
+  backdrop-filter:var(--kaca-blur);
+}
+
+/* Tanpa backdrop-filter, kaca tetap harus terbaca: isi dibuat lebih pekat */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .kaca{background-color:rgba(20,24,34,.92)}
+  html[data-tema="terang"] .kaca{background-color:rgba(250,251,253,.94)}
+}
+
+/* ====== navigasi ====== */
+.site-head{
+  position:sticky;top:0;z-index:40;
+  padding:14px 0;
+  background:transparent;
+}
+.nav{
+  display:flex;align-items:center;gap:14px;
+  min-height:60px;
+  padding:0 10px 0 20px;
+  border-radius:999px;
+}
+.logo{
+  display:flex;align-items:center;gap:9px;
+  color:var(--teks);text-decoration:none;
+  font-weight:700;font-size:1.04rem;letter-spacing:.005em;
+  padding:6px 0;
+}
+.logo-mark{width:26px;height:26px;flex:none;display:block}
+
+.nav-menu{margin-left:auto;display:flex;align-items:center;gap:14px}
+.nav-list{display:flex;align-items:center;gap:2px;list-style:none}
+.nav-list a{
+  display:inline-flex;align-items:center;min-height:38px;
+  padding:0 13px;border-radius:999px;
+  color:var(--redup);text-decoration:none;font-weight:500;font-size:.9rem;
+  transition:color .15s ease,background-color .15s ease;
+}
+.nav-list a:hover{color:var(--teks);background:var(--kaca-isi-kuat)}
+.nav-list a:active{background:var(--kaca-isi)}
+
+.nav-aksi{display:flex;align-items:center;gap:8px}
+
+.tombol-tema{
+  width:38px;height:38px;flex:none;
+  display:grid;place-items:center;
+  background:transparent;color:var(--redup);
+  border:1px solid transparent;border-radius:999px;
+  transition:color .15s ease,background-color .15s ease,border-color .15s ease;
+}
+.tombol-tema:hover{color:var(--teks);background:var(--kaca-isi-kuat);border-color:var(--kaca-garis-kontrol)}
+.tombol-tema:active{background:var(--kaca-isi)}
+html[data-tema="terang"] .ikon-matahari{display:none}
+html[data-tema="gelap"] .ikon-bulan{display:none}
+
+.menu-toggle{
+  display:none;
+  /* Teks di tengah mendatar dan menegak. Tanpa align-items, kotak teks di dalam
+     inline-flex melar setinggi tombol, lalu teksnya menempel di atas. */
+  align-items:center;justify-content:center;
+  /* flex:none mencegah tombol menyusut di dalam batang flex. Tanpa ini, tombol
+     bisa terhimpit sampai selebar min-width dan bentuk pilnya jadi oval. */
+  flex:none;
+  min-height:44px;min-width:96px;padding:0 20px;
+  white-space:nowrap;
+  background:var(--kontrol-isi);color:var(--teks);
+  border:1px solid var(--kontrol-garis);border-radius:999px;
+  box-shadow:var(--kontrol-bayang);
+  /* font:inherit mereset line-height ke nilai warisan, jadi line-height harus
+     ditulis setelahnya. Kalau dibalik, nilainya hilang tanpa peringatan. */
+  font:inherit;font-weight:600;font-size:.92rem;
+  line-height:1;
+  transition:background-color .15s ease,border-color .15s ease;
+}
+.menu-toggle:hover{background:var(--kontrol-isi-hover)}
+.menu-toggle:active{background:var(--kontrol-isi-hover)}
+/* Saat panel terbuka, garis tombol mengikuti warna teks: satu-satunya penanda
+   status yang tetap terlihat di kedua tema. */
+.menu-toggle[aria-expanded="true"]{border-color:var(--teks)}
+
+/* ====== tombol ====== */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:10px;
+  min-height:52px;padding:0 28px;
+  border-radius:999px;border:1px solid transparent;
+  font:inherit;font-weight:600;text-decoration:none;
+  transition:background-color .16s ease,border-color .16s ease,color .16s ease,box-shadow .16s ease;
+}
+.btn svg{flex:none}
+
+/* Tombol utama: biru ikon, dengan rim terang di tepi atas dan cahaya lembut di bawah */
+.btn-isi{
+  background:var(--tombol);color:var(--tombol-teks);
+  border-color:rgba(255,255,255,.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.34),
+    inset 0 -1px 0 rgba(0,0,0,.2),
+    0 10px 26px rgba(43,83,192,.32);
+}
+.btn-isi:hover{background:var(--tombol-hover);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 12px 30px rgba(59,111,224,.36)}
+.btn-isi:active{background:var(--tombol);box-shadow:inset 0 1px 0 rgba(255,255,255,.24),0 6px 16px rgba(43,83,192,.28)}
+
+/* Tombol kedua: kaca netral, batas lebih tegas supaya terbaca sebagai kontrol */
+.btn-garis{
+  background-color:var(--kaca-isi-kuat);
+  background-image:linear-gradient(180deg,var(--kaca-sheen) 0%,transparent 46%);
+  color:var(--teks);
+  border-color:var(--kaca-tepi-aksi);
+  -webkit-backdrop-filter:var(--kaca-blur);
+  backdrop-filter:var(--kaca-blur);
+}
+.btn-garis:hover{background-color:var(--kaca-isi)}
+.btn-garis:active{background-color:transparent}
+
+/* Diletakkan setelah .btn supaya tinggi dan padding ringkasnya menang */
+.btn-nav{
+  min-height:38px;padding:0 18px;
+  font-size:.88rem;font-weight:600;
+}
+.btn-nav svg{width:15px;height:15px}
+
+@media(max-width:820px){
+  .nav{flex-wrap:wrap;padding:0 10px 0 16px;gap:10px}
+  .nav-menu{
+    flex-direction:column;align-items:stretch;gap:0;
+  }
+  html.js .menu-toggle{display:inline-flex;margin-left:auto}
+  html.js .nav-menu{
+    display:none;position:absolute;left:0;right:0;top:calc(100% + 8px);
+    /* Alas pekat, bukan kaca tembus. Panel ini menumpuk teks halaman, dan
+       backdrop-filter tidak bisa membiaskan apa pun di sini: .nav induknya sudah
+       memakai backdrop-filter, jadi ia menjadi backdrop root dan anaknya hanya
+       bisa membiaskan isi di dalam induk itu. Kilap dan rim tetap ada supaya
+       panel masih terbaca sebagai material yang sama dengan batang di atasnya. */
+    background-color:var(--menu-isi);
+    background-image:linear-gradient(180deg,var(--kaca-sheen) 0%,transparent 46%);
+    /* Batas panel memakai garis khusus panel, bukan garis kontrol: ring kontrol
+       diukur 3:1 terhadap isinya, dan kalau dipakai di sekeliling panel besar
+       hasilnya terbaca sebagai kartu berat. */
+    border:1px solid var(--menu-garis);
+    border-radius:20px;
+    box-shadow:inset 0 1px 0 var(--kaca-rim),var(--kaca-bayang);
+    padding:10px;
+    /* Layar mendatar bertinggi kecil: panel tidak boleh melewati layar */
+    max-height:calc(100vh - 96px);
+    overflow-y:auto;
+    overscroll-behavior:contain;
+  }
+  html.js .nav-menu.buka{display:flex}
+  html:not(.js) .nav-menu{
+    flex-basis:100%;margin-left:0;
+    padding:8px 0 10px;
+  }
+  /* Tanpa JS menu ikut mengalir di dalam batang, jadi bentuk pil diganti sudut panel */
+  html:not(.js) .nav{border-radius:20px;padding-bottom:8px}
+  .nav-list{flex-direction:column;align-items:stretch;gap:2px}
+  .nav-list a{padding:12px 16px;min-height:44px;font-size:.95rem;border-radius:14px}
+  /* Di dalam panel yang pekat, isi kaca tidak lagi terlihat. Hover memakai
+     isi tipis khusus panel supaya tetap terbaca di kedua tema. */
+  .nav-list a:hover{background:var(--menu-hover)}
+  .nav-list a:active{background:var(--menu-hover)}
+  .nav-aksi{
+    margin-top:8px;padding-top:10px;
+    border-top:1px solid var(--garis);
+    gap:8px;
+  }
+  .nav-aksi .btn-nav{flex:1;min-height:44px;font-size:.95rem}
+  .nav-aksi .btn-nav svg{width:16px;height:16px}
+  /* Dua kontrol di batang memakai isi dan garis yang sama, supaya tidak ada yang
+     terlihat lebih penting dari yang lain. Isinya pekat, bukan kaca: di atas
+     batang kaca, tombol transparan terbaca sebagai lingkaran kosong. */
+  .tombol-tema{
+    width:44px;height:44px;
+    background:var(--kontrol-isi);
+    border-color:var(--kontrol-garis);
+    box-shadow:var(--kontrol-bayang);
+    color:var(--teks);
+  }
+  .tombol-tema:hover{
+    background:var(--kontrol-isi-hover);
+    border-color:var(--kontrol-garis);
+    color:var(--teks);
+  }
+  /* Tanpa ini, :active dari aturan dasar (isi kaca) menang dan tombol berkedip
+     transparan saat ditekan. */
+  .tombol-tema:active{
+    background:var(--kontrol-isi-hover);
+    border-color:var(--kontrol-garis);
+  }
+}
+
+/* ====== hero ====== */
+.hero{padding:60px 0 96px}
+@media(max-width:820px){.hero{padding:36px 0 64px}}
+.hero-grid{
+  display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);
+  gap:52px;align-items:center;
+}
+@media(max-width:980px){
+  .hero-grid{grid-template-columns:1fr;gap:40px}
+}
+
+.kicker{
+  font-family:var(--mono);font-size:.78rem;color:var(--redup);
+  margin-bottom:20px;
+}
+.hero h1{
+  font-size:clamp(2.5rem,5.6vw,4.4rem);
+  font-weight:800;line-height:1.02;letter-spacing:-.035em;
+  margin-bottom:20px;
+  text-wrap:balance;
+}
+.hero .lede{
+  color:var(--redup);font-size:clamp(1rem,1.6vw,1.1rem);
+  max-width:34em;margin-bottom:30px;
+}
+.hero-aksi{display:flex;flex-wrap:wrap;align-items:center;gap:18px}
+/* Di ponsel, aksi utama melebar penuh supaya sasaran ketuknya jelas. Tautan
+   sekunder tetap selebar teksnya supaya garis bawahnya tidak memanjang. */
+@media(max-width:520px){
+  .hero-aksi{flex-direction:column;align-items:flex-start;gap:6px}
+  .hero-aksi .btn{width:100%}
+}
+.tautan-teks{
+  color:var(--teks);text-decoration:none;
+  border-bottom:1px solid var(--garis-tautan);
+  padding-bottom:2px;font-weight:500;font-size:.95rem;
+  display:inline-flex;align-items:center;min-height:44px;
+}
+.tautan-teks:hover{border-bottom-color:var(--aksen)}
+.hero-meta{
+  margin-top:24px;font-family:var(--mono);font-size:.74rem;color:var(--redup);
+  display:flex;flex-wrap:wrap;gap:6px 10px;
+}
+.hero-meta span[aria-hidden="true"]{opacity:.55}
+/* Pemisah "/" hanya masuk akal saat ketiga butir muat sebaris. Di ponsel
+   pemisah itu menggantung di ujung baris, jadi tiap butir diberi barisnya. */
+@media(max-width:520px){
+  .hero-meta{flex-direction:column;gap:3px}
+  .hero-meta span[aria-hidden="true"]{display:none}
+}
+
+/* ====== piano roll ====== */
+.roll-panel{padding:0;overflow:hidden}
+.roll-top{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  flex-wrap:wrap;
+  padding:14px 20px;
+  border-bottom:1px solid var(--garis);
+}
+.roll-name{font-family:var(--mono);font-size:.74rem;color:var(--redup)}
+.readout{display:flex;gap:16px;flex-wrap:wrap}
+.readout div{display:flex;align-items:baseline;gap:6px}
+.readout dt{font-family:var(--mono);font-size:.66rem;color:var(--redup)}
+.readout dd{font-family:var(--mono);font-size:.74rem;color:var(--teks)}
+
+.roll{
+  display:grid;grid-template-columns:52px minmax(0,1fr);
+  padding:16px 20px 20px;
+}
+.roll-label-col{display:grid;grid-template-rows:20px repeat(7,1fr)}
+.roll-label-col span{
+  display:flex;align-items:center;gap:5px;
+  font-family:var(--mono);font-size:.64rem;color:var(--redup);
+}
+.roll-label-col b{color:var(--teks);font-weight:500}
+.roll-label-col i{font-style:normal}
+
+.roll-track{display:grid;grid-template-rows:20px auto}
+.ruler{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  font-family:var(--mono);font-size:.62rem;color:var(--redup);
+}
+.ruler span{padding-left:4px}
+
+.roll-grid{
+  display:grid;
+  grid-template-columns:repeat(16,1fr);
+  grid-template-rows:repeat(7,1fr);
+  height:clamp(168px,23vw,216px);
+  border-left:1px solid var(--garis-tebal);
+  border-bottom:1px solid var(--garis-tebal);
+  background-image:
+    linear-gradient(to bottom,var(--garis) 1px,transparent 1px),
+    linear-gradient(to right,var(--garis) 1px,transparent 1px);
+  background-size:100% calc(100% / 7),calc(100% / 16) 100%;
+}
+/* Blok nada memakai aksen dengan rim terang, satu-satunya elemen yang berwarna */
+.blok{
+  background:var(--aksen);
+  border-radius:6px;
+  margin:2px 1px;
+  display:grid;place-items:center;
+  font-family:var(--mono);font-size:.6rem;line-height:1;
+  color:var(--aksen-teks);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 2px 8px rgba(31,71,184,.3);
+  z-index:1;
+}
+.barline{
+  grid-row:1/-1;
+  border-left:1px solid var(--garis-tebal);
+  pointer-events:none;
+}
+.playhead{
+  grid-row:1/-1;grid-column:1;
+  justify-self:start;width:1px;
+  background:var(--aksen);opacity:.9;
+  position:relative;z-index:2;pointer-events:none;
+}
+.playhead::before{
+  content:"";position:absolute;top:0;left:-3px;
+  width:7px;height:7px;border-radius:2px;
+  background:var(--aksen);
+}
+.roll-cap{
+  padding:0 20px 18px;
+  font-size:.8rem;color:var(--redup);
+}
+
+@media(max-width:520px){
+  .roll-label-col span i{display:none}
+  .blok{font-size:0}
+  .roll{padding:12px 14px 16px}
+  .roll-top{padding:12px 14px}
+  .roll-cap{padding:0 14px 16px}
+}
+
+/* ====== seksi ====== */
+.seksi{padding:88px 0}
+.seksi + .seksi{padding-top:0}
+.kepala-seksi{max-width:46em;margin-bottom:36px}
+.seksi h2{
+  font-size:clamp(1.7rem,3.4vw,2.4rem);
+  font-weight:700;letter-spacing:-.025em;line-height:1.12;
+  margin-bottom:10px;
+  text-wrap:balance;
+}
+.seksi .pengantar{color:var(--redup)}
+@media(max-width:820px){
+  .seksi{padding:64px 0}
+  .kepala-seksi{margin-bottom:28px}
+}
+
+/* ====== lima tahap ====== */
+.tahap-panel{padding:6px 26px}
+.tahap{list-style:none}
+.tahap li{
+  display:grid;
+  grid-template-columns:56px minmax(0,1fr) minmax(0,220px);
+  gap:22px;align-items:baseline;
+  padding:22px 0;
+  border-bottom:1px solid var(--garis);
+}
+.tahap li:last-child{border-bottom:none}
+.tahap-no{font-family:var(--mono);font-size:.76rem;color:var(--aksen-teks-kaca)}
+.tahap h3{font-size:1.04rem;font-weight:600;letter-spacing:-.01em;margin-bottom:4px}
+.tahap p{color:var(--redup);font-size:.94rem;max-width:38em}
+.tahap .tahap-status{
+  font-family:var(--mono);font-size:.7rem;color:var(--redup);
+  text-align:right;
+}
+.tahap-status b{display:block;font-weight:500;color:var(--teks);margin-bottom:2px}
+@media(max-width:820px){
+  .tahap-panel{padding:4px 18px}
+  .tahap li{grid-template-columns:42px minmax(0,1fr);gap:14px;padding:20px 0}
+  .tahap .tahap-status{grid-column:2;text-align:left;margin-top:2px}
+}
+
+/* ====== cara pakai ====== */
+.cara{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:24px;align-items:start;
+}
+@media(max-width:900px){.cara{grid-template-columns:1fr;gap:20px}}
+
+.dokumen{overflow:hidden}
+.dokumen-top{
+  display:flex;justify-content:space-between;gap:12px;
+  padding:13px 18px;
+  border-bottom:1px solid var(--garis);
+  font-family:var(--mono);font-size:.72rem;color:var(--redup);
+}
+.dokumen pre{
+  padding:20px 18px 24px;
+  font-family:var(--mono);font-size:clamp(.82rem,1.5vw,.92rem);
+  line-height:1.8;color:var(--teks);
+  overflow-x:auto;
+}
+.dokumen .pipa{color:var(--aksen-teks-kaca)}
+
+.langkah-panel{padding:8px 24px}
+.langkah{list-style:none}
+.langkah li{
+  display:grid;grid-template-columns:38px minmax(0,1fr);gap:14px;
+  padding:18px 0;
+  border-bottom:1px solid var(--garis);
+}
+.langkah li:last-child{border-bottom:none}
+.langkah .n{font-family:var(--mono);font-size:.74rem;color:var(--redup);padding-top:3px}
+.langkah h3{font-size:.98rem;font-weight:600;margin-bottom:3px}
+.langkah p{color:var(--redup);font-size:.92rem}
+.langkah code{
+  font-family:var(--mono);font-size:.86em;
+  background:var(--kaca-isi-kuat);
+  border:1px solid var(--garis);
+  border-radius:6px;padding:1px 6px;color:var(--teks);
+}
+@media(max-width:520px){
+  .langkah-panel{padding:4px 18px}
+}
+
+/* ====== unduh ====== */
+.unduh{padding-bottom:96px}
+.paket{list-style:none;display:flex;flex-direction:column;gap:14px}
+.paket li{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;
+  gap:28px;align-items:center;
+  padding:26px 28px;
+}
+.paket-format{
+  font-family:var(--mono);font-size:.72rem;color:var(--aksen-teks-kaca);
+  margin-bottom:5px;
+}
+.paket h3{font-size:1.12rem;font-weight:600;letter-spacing:-.015em;margin-bottom:5px}
+.paket-ket{color:var(--redup);font-size:.94rem;max-width:38em}
+.paket-aksi{
+  display:flex;flex-direction:column;align-items:flex-end;gap:10px;
+  flex:none;
+}
+.paket-meta{
+  font-family:var(--mono);font-size:.7rem;color:var(--redup);
+  white-space:nowrap;
+}
+.unduh-catatan{
+  margin-top:20px;font-size:.86rem;color:var(--redup);
+}
+.unduh-catatan b{color:var(--teks);font-weight:500}
+
+@media(max-width:760px){
+  .paket li{grid-template-columns:1fr;gap:18px;padding:22px}
+  .paket-aksi{align-items:stretch}
+  .paket-aksi .btn{width:100%}
+  .paket-meta{white-space:normal}
+}
+
+/* ====== kaki ====== */
+.site-foot{padding:26px 0 40px}
+.site-foot .dalam{
+  display:flex;flex-wrap:wrap;gap:10px 24px;
+  justify-content:space-between;align-items:center;
+  padding-top:22px;
+  border-top:1px solid var(--garis);
+}
+.site-foot p{color:var(--redup);font-size:.84rem;font-family:var(--mono)}
+.site-foot a{
+  color:var(--redup);text-decoration:none;font-size:.84rem;
+  display:inline-flex;align-items:center;min-height:44px;
+}
+.site-foot a:hover{color:var(--teks)}
+</style>
+</head>
+<body id="atas">
+
+<!-- Bidang warna di belakang kaca. Murni dekorasi, tidak dibaca pembaca layar. -->
+<div class="latar" aria-hidden="true">
+  <span class="pudar-1"></span>
+  <span class="pudar-2"></span>
+  <span class="pudar-3"></span>
+</div>
+
+<a class="skip" href="#isi">Langsung ke isi</a>
+
+<header class="site-head">
+  <div class="wrap">
+    <div class="nav kaca">
+      <a class="logo" href="#atas">
+        <img class="logo-mark" src="icon.png" width="26" height="26" alt="">
+        NUMA
+      </a>
+
+      <button class="menu-toggle" id="tombol-menu" aria-expanded="false" aria-controls="menu-utama">Menu</button>
+
+      <nav class="nav-menu" id="menu-utama" aria-label="Menu utama">
+        <ul class="nav-list">
+          <li><a href="#fitur">Fitur</a></li>
+          <li><a href="#cara-pakai">Cara pakai</a></li>
+        </ul>
+        <div class="nav-aksi">
+          <a class="btn btn-isi btn-nav" href="#unduh">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 3.5v11.6m0 0 4.6-4.6m-4.6 4.6L7.4 10.5M4 20.5h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Unduh
+          </a>
+        </div>
+      </nav>
+
+      <button class="tombol-tema" id="tombol-tema" aria-label="Ganti ke tema terang">
+        <svg class="ikon-matahari" width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.1" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M12 2.6v2.1m0 14.6v2.1M2.6 12h2.1m14.6 0h2.1M5.2 5.2l1.5 1.5m10.6 10.6 1.5 1.5m0-13.6-1.5 1.5M6.7 17.3l-1.5 1.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+        <svg class="ikon-bulan" width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M20 14.3A8.3 8.3 0 0 1 9.7 4a8.3 8.3 0 1 0 10.3 10.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="isi">
+
+  <section class="hero wrap">
+    <div class="hero-grid">
+
+      <div>
+        <p class="kicker">not angka / .mid</p>
+        <h1>Not angka masuk. Berkas MIDI keluar.</h1>
+        <p class="lede">NUMA membaca dokumen not angka Anda, memeriksa strukturnya, lalu menuliskannya sebagai berkas .mid. Setiap tahapnya tampil di aplikasi, jadi Anda bisa melihat apa yang terjadi sebelum menekan Simpan.</p>
+
+        <!-- Kedua installer tidak disimpan di repo ini. Berkasnya menempel pada
+             rilis GitHub, dan alamat di bawah selalu menunjuk rilis terbaru.
+             Nama aset peka huruf besar-kecil, jadi samakan dengan nama berkas yang diunggah. -->
+        <div class="hero-aksi">
+          <a class="btn btn-isi" href="https://github.com/xrgsss/web-numa/releases/latest/download/NUMA-Setup.exe">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 3.5v11.6m0 0 4.6-4.6m-4.6 4.6L7.4 10.5M4 20.5h16" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Unduh installer .exe
+          </a>
+          <a class="tautan-teks" href="#unduh">Pakai .msi sebagai gantinya</a>
+        </div>
+
+        <p class="hero-meta">
+          <span>versi <b>1.0.0</b></span>
+          <span aria-hidden="true">/</span>
+          <span>.exe 117 MB</span>
+          <span aria-hidden="true">/</span>
+          <span>.msi 122 MB</span>
+        </p>
+      </div>
+
+      <figure class="roll-panel kaca">
+        <div class="roll-top">
+          <span class="roll-name">ilustrasi pemetaan pitch</span>
+          <dl class="readout">
+            <div><dt>tempo</dt><dd>100</dd></div>
+            <div><dt>birama</dt><dd>4/4</dd></div>
+            <div><dt>do</dt><dd>C</dd></div>
+          </dl>
+        </div>
+
+        <div class="roll">
+          <div class="roll-label-col" aria-hidden="true">
+            <span></span>
+            <span><b>7</b><i>si</i></span>
+            <span><b>6</b><i>la</i></span>
+            <span><b>5</b><i>sol</i></span>
+            <span><b>4</b><i>fa</i></span>
+            <span><b>3</b><i>mi</i></span>
+            <span><b>2</b><i>re</i></span>
+            <span><b>1</b><i>do</i></span>
+          </div>
+
+          <div class="roll-track" aria-hidden="true">
+            <div class="ruler"><span>1</span><span>2</span><span>3</span><span>4</span></div>
+            <div class="roll-grid">
+              <span class="blok" style="grid-row:7;grid-column:1">1</span>
+              <span class="blok" style="grid-row:6;grid-column:2">2</span>
+              <span class="blok" style="grid-row:5;grid-column:3">3</span>
+              <span class="blok" style="grid-row:4;grid-column:4">4</span>
+
+              <span class="blok" style="grid-row:3;grid-column:5">5</span>
+              <span class="blok" style="grid-row:3;grid-column:6">5</span>
+              <span class="blok" style="grid-row:2;grid-column:7">6</span>
+              <span class="blok" style="grid-row:3;grid-column:8">5</span>
+
+              <span class="blok" style="grid-row:5;grid-column:9">3</span>
+              <span class="blok" style="grid-row:4;grid-column:10">4</span>
+              <span class="blok" style="grid-row:3;grid-column:11 / span 2">5</span>
+
+              <span class="blok" style="grid-row:7;grid-column:13 / span 4">1</span>
+
+              <span class="barline" style="grid-column:5"></span>
+              <span class="barline" style="grid-column:9"></span>
+              <span class="barline" style="grid-column:13"></span>
+
+              <span class="playhead"></span>
+            </div>
+          </div>
+        </div>
+
+        <figcaption class="roll-cap">Ilustrasi tahap 3: baris adalah pitch, kolom adalah ketuk. Angka 1 sampai 7 menentukan barisnya, tanda durasi menentukan lebar blok.</figcaption>
+      </figure>
+
+    </div>
+  </section>
+
+  <section class="seksi wrap" id="fitur">
+    <div class="kepala-seksi">
+      <h2>Lima tahap, semuanya terlihat.</h2>
+      <p class="pengantar">Setiap kali Konversi ditekan, NUMA menjalankan lima tahap ini dan menulis hasilnya ke panel kanan aplikasi, di bawah Ringkasan yang menampilkan status konversi. Teks di kanan setiap baris adalah isi panel sebelum Anda mulai.</p>
+    </div>
+
+    <div class="tahap-panel kaca">
+      <ol class="tahap">
+        <li>
+          <span class="tahap-no" aria-hidden="true">01</span>
+          <div>
+            <h3>Token</h3>
+            <p>Header tempo dan birama, angka not, tanda oktaf, istirahat, tanda durasi, dan garis birama dibaca sebagai token terpisah.</p>
+          </div>
+          <p class="tahap-status"><b>Panel 1: Token</b>belum ada token</p>
+        </li>
+        <li>
+          <span class="tahap-no" aria-hidden="true">02</span>
+          <div>
+            <h3>Validasi struktur</h3>
+            <p>Struktur notasi diperiksa terhadap header tempo dan birama, lalu hasilnya ditulis di panel ini. Centang Validasi ketuk per birama untuk ikut menghitung jumlah ketuk pada tiap birama.</p>
+          </div>
+          <p class="tahap-status"><b>Panel 2: Validasi struktur</b>belum ada hasil validasi</p>
+        </li>
+        <li>
+          <span class="tahap-no" aria-hidden="true">03</span>
+          <div>
+            <h3>Pemetaan pitch dan durasi</h3>
+            <p>Angka 1 sampai 7 dipetakan ke nada do sampai si, lengkap dengan tanda oktaf dan panjang ketuk yang Anda tulis.</p>
+          </div>
+          <p class="tahap-status"><b>Panel 3: Pemetaan</b>belum ada pemetaan</p>
+        </li>
+        <li>
+          <span class="tahap-no" aria-hidden="true">04</span>
+          <div>
+            <h3>MIDI event</h3>
+            <p>Pemetaan pitch dan durasi diterjemahkan menjadi event MIDI standar, siap disimpan dan diputar.</p>
+          </div>
+          <p class="tahap-status"><b>Panel 4: MIDI event</b>belum ada event</p>
+        </li>
+        <li>
+          <span class="tahap-no" aria-hidden="true">05</span>
+          <div>
+            <h3>Hex dump berkas MIDI</h3>
+            <p>Setelah berkas disimpan, isinya ditampilkan byte demi byte, jadi hasil konversi bisa Anda periksa sendiri.</p>
+          </div>
+          <p class="tahap-status"><b>Panel 5: Hex dump</b>belum ada berkas MIDI</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="seksi wrap" id="cara-pakai">
+    <div class="kepala-seksi">
+      <h2>Tiga langkah, satu berkas.</h2>
+      <p class="pengantar">Dokumen di kiri adalah contoh yang sama dengan tombol Muat Contoh di aplikasi.</p>
+    </div>
+
+    <div class="cara">
+      <div class="dokumen kaca">
+        <div class="dokumen-top">
+          <span>dokumen not angka</span>
+          <span>3 birama</span>
+        </div>
+        <pre>tempo=100
+birama=4/4
+do=C
+1 2 3 4 <span class="pipa">|</span> 5 - 5/ 6/ <span class="pipa">|</span> 7' 0 1'' - <span class="pipa">|</span></pre>
+      </div>
+
+      <div class="langkah-panel kaca">
+        <ol class="langkah">
+          <li>
+            <span class="n" aria-hidden="true">01</span>
+            <div>
+              <h3>Tulis atau buka dokumennya</h3>
+              <p>Ketik langsung di panel kiri, tempel teksnya, atau muat berkas lewat <code>Buka Dokumen</code>. Taruh header <code>tempo=</code> dan <code>birama=</code> di baris awal, lalu pisahkan birama dengan <code>|</code>.</p>
+            </div>
+          </li>
+          <li>
+            <span class="n" aria-hidden="true">02</span>
+            <div>
+              <h3>Tekan Konversi</h3>
+              <p>Token, hasil validasi, pemetaan pitch, dan event MIDI terisi di panel kanan. Panel validasi menampilkan hasil pemeriksaan strukturnya.</p>
+            </div>
+          </li>
+          <li>
+            <span class="n" aria-hidden="true">03</span>
+            <div>
+              <h3>Tekan Simpan .mid</h3>
+              <p>Berkasnya bisa diputar di pemutar MIDI biasa. Panel hex dump menampilkan isi berkas yang baru disimpan.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="seksi unduh wrap" id="unduh">
+    <div class="kepala-seksi">
+      <h2>Unduh NUMA</h2>
+      <p class="pengantar">Dua berkas, isi yang sama. Pilih menurut cara Anda memasang aplikasi.</p>
+    </div>
+
+    <ul class="paket">
+      <li class="kaca">
+        <div>
+          <p class="paket-format">.exe</p>
+          <h3>Installer</h3>
+          <p class="paket-ket">Buka berkasnya, ikuti langkah pemasangan, lalu jalankan NUMA dari menu Start. Ini pilihan untuk pemakaian sehari-hari.</p>
+        </div>
+        <div class="paket-aksi">
+          <p class="paket-meta">NUMA-Setup.exe / 117 MB</p>
+          <a class="btn btn-isi" href="https://github.com/xrgsss/web-numa/releases/latest/download/NUMA-Setup.exe">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 3.5v11.6m0 0 4.6-4.6m-4.6 4.6L7.4 10.5M4 20.5h16" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Unduh .exe
+          </a>
+        </div>
+      </li>
+
+      <li class="kaca">
+        <div>
+          <p class="paket-format">.msi</p>
+          <h3>Paket Windows Installer</h3>
+          <p class="paket-ket">Pakai ini kalau pemasangan dijalankan lewat kebijakan grup, Intune, atau skrip. Berkasnya juga bisa dibuka langsung dengan klik dua kali.</p>
+        </div>
+        <div class="paket-aksi">
+          <p class="paket-meta">NUMA-Setup.msi / 122 MB</p>
+          <a class="btn btn-garis" href="https://github.com/xrgsss/web-numa/releases/latest/download/NUMA-Setup.msi">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 3.5v11.6m0 0 4.6-4.6m-4.6 4.6L7.4 10.5M4 20.5h16" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Unduh .msi
+          </a>
+        </div>
+      </li>
+    </ul>
+
+    <p class="unduh-catatan">Versi <b>1.0.0</b>. Ukuran di atas diambil dari berkas yang ada di folder situs ini.</p>
+  </section>
+
+</main>
+
+<footer class="site-foot wrap">
+  <div class="dalam">
+    <p>NUMA / konversi not angka ke MIDI</p>
+    <a href="#atas">Kembali ke atas</a>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var tombol = document.getElementById('tombol-menu');
+  var menu = document.getElementById('menu-utama');
+
+  function tutupMenu(){
+    menu.classList.remove('buka');
+    tombol.setAttribute('aria-expanded','false');
+  }
+
+  tombol.addEventListener('click', function(){
+    var terbuka = menu.classList.toggle('buka');
+    tombol.setAttribute('aria-expanded', String(terbuka));
+  });
+
+  menu.addEventListener('click', function(e){
+    if(e.target.closest('a')) tutupMenu();
+  });
+
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && menu.classList.contains('buka')){
+      tutupMenu();
+      tombol.focus();
+    }
+  });
+
+  var akar = document.documentElement;
+  var tombolTema = document.getElementById('tombol-tema');
+  var meta = document.getElementById('meta-tema');
+
+  function labelTema(){
+    tombolTema.setAttribute('aria-label', akar.getAttribute('data-tema') === 'terang' ? 'Ganti ke tema gelap' : 'Ganti ke tema terang');
+    meta.setAttribute('content', akar.getAttribute('data-tema') === 'terang' ? '#eef1f6' : '#070910');
+  }
+
+  labelTema();
+
+  tombolTema.addEventListener('click', function(){
+    var tema = akar.getAttribute('data-tema') === 'terang' ? 'gelap' : 'terang';
+    akar.setAttribute('data-tema', tema);
+    try{ localStorage.setItem('numa-tema', tema); }catch(e){}
+    labelTema();
+  });
+})();
+</script>
+
+</body>
+</html>
