@@ -6,6 +6,7 @@ Situs unduhan aplikasi NUMA (konversi not angka ke MIDI). Satu berkas: `index.ht
 
 - Kedua installer, `NUMA-Setup.exe` (117 MB) dan `NUMA-Setup.msi` (122 MB), tidak disimpan di repo. GitHub menolak berkas di atas 100 MB, jadi keduanya menempel sebagai aset rilis dan sudah masuk `.gitignore`. Unggah ulang keduanya setiap kali membuat rilis baru.
 - `index.html`: tombol unduh memakai `https://github.com/xrgsss/web-numa/releases/latest/download/<nama-berkas>`, jadi rilis baru tidak perlu mengubah HTML. Nama aset peka huruf besar-kecil, jadi nama berkas yang diunggah ke rilis harus persis `NUMA-Setup.exe` dan `NUMA-Setup.msi`. Kalau nama salah, tautannya 404.
+- Unggah aset jangan lewat halaman rilis di browser: untuk berkas di atas 100 MB halaman itu gagal dengan pesan "Something went really wrong". `gh release create` juga putus di tengah dengan `http2: client connection force closed`. Yang berhasil: buat rilis draf dulu, unggah tiap berkas dengan `curl --http1.1 -T <berkas>` ke `https://uploads.github.com/repos/xrgsss/web-numa/releases/<id>/assets?name=<nama>`, lalu terbitkan drafnya. Rilis `v1.0.0` (id 438090890) dibuat dengan cara ini.
 - `index.html`: versi yang tampil sekarang `1.0.0`, di hero dan di seksi Unduh. Samakan dengan nomor versi rilis sebelum situs dipublikasikan.
 - `index.html`: `og:image` memakai `icon.png` secara relatif. Ganti ke URL absolut setelah situs punya alamat.
 - `icon.png` harus tetap di folder yang sama dengan `index.html`. Berkas ini dipakai sebagai favicon, apple-touch-icon, tanda navigasi, dan og:image.
